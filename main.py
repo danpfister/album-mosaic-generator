@@ -48,7 +48,7 @@ def save_image(url, path):
     file.write(image.content)
     file.close()
     
-def get_album_covers(spotify, IMG_COUNT: int, TIME_RANGE):
+def get_album_covers(spotify: spotipy.Spotify, IMG_COUNT: int, TIME_RANGE):
     unique_album_ids = set()
     albums = list()
     offset = 0
@@ -56,6 +56,8 @@ def get_album_covers(spotify, IMG_COUNT: int, TIME_RANGE):
     while len(unique_album_ids) < IMG_COUNT:
         top_tracks = spotify.current_user_top_tracks(limit=1, offset=offset, time_range=TIME_RANGE)
         offset += 1
+        if len(top_tracks['items']) == 0:
+            raise Exception("reached album limit")
         album = top_tracks['items'][0]['album']
         if album['id'] in unique_album_ids:
             print(f"skipped album {album['name']} (duplicate)")
