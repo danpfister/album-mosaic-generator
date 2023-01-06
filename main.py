@@ -48,13 +48,13 @@ def save_image(url, path):
     file.write(image.content)
     file.close()
     
-def get_album_covers(spotify, IMG_COUNT: int):
+def get_album_covers(spotify, IMG_COUNT: int, TIME_RANGE):
     unique_album_ids = set()
     albums = list()
     offset = 0
     index = 0
     while len(unique_album_ids) < IMG_COUNT:
-        top_tracks = spotify.current_user_top_tracks(limit=1, offset=offset)
+        top_tracks = spotify.current_user_top_tracks(limit=1, offset=offset, time_range=TIME_RANGE)
         offset += 1
         album = top_tracks['items'][0]['album']
         if album['id'] in unique_album_ids:
@@ -80,8 +80,19 @@ def create_image(albums: list, SIZE):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Album Mosaic Generator")
     parser.add_argument('--size', help="Set the number of albums in x and y axis", default=5, required=False)
+    parser.add_argument('--range', help="Set the time range of top tracks to use: 'short', 'medium', 'long'", default="medium", required=False)
     args = parser.parse_args()
+    
     MOSAIC_WIDTH = int(args.size)
+    if args.range not in ["short", "medium", "long"]:
+        raise Exception("invalid argument for range")
+    match args.range:
+        case "short":
+            TIME_RANGE = "short_term"
+        case "medium":
+            TIME_RANGE = "medium_term"
+        case "long":
+            TIME_RANGE = "long_term"
     
     USERNAME, CLIENT_ID, CLIENT_SECRET = get_credentials()
     
@@ -90,6 +101,6 @@ if __name__ == "__main__":
                                                    redirect_uri="https://github.com/danpfister",
                                                    scope="user-top-read"))
     
-    albums = get_album_covers(spotify, MOSAIC_WIDTH**2)
+    albums = get_album_covers(spotify, MOSAIC_WIDTH**2, TIME_RANGE)
     create_image(albums, MOSAIC_WIDTH)
     
