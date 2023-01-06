@@ -4,6 +4,35 @@ import json
 import requests
 import cv2 as cv
 import numpy as np
+import argparse
+
+class Album:
+    def __init__(self, album, path) -> None:
+        self.name = album['name']
+        self.id = album['id']
+        self.path = path
+        self.color = self.get_dominant_color()
+        self.luminance = self.get_luminance()
+        
+    def __repr__(self) -> str:
+        return f"{self.name} with luminance {self.luminance}"
+            
+    def get_dominant_color(self):
+        image = cv.imread(self.path)
+        image = image.reshape((-1, 3))
+        image = np.float32(image)
+        
+        criteria = (cv.TermCriteria_EPS + cv.TermCriteria_MAX_ITER, 10, 1.0)
+        flags = cv.KMEANS_RANDOM_CENTERS
+        K = 8
+        _, labels, palette = cv.kmeans(image, K, None, criteria, 10, flags)
+        _, counts = np.unique(labels, return_counts=True)
+        
+        return palette[np.argmax(counts)]
+        
+    def get_luminance(self):
+        r, g, b = self.color
+        return 0.213*r + 0.715*g + 0.072*b
 
 def get_credentials():
     try:
@@ -19,35 +48,48 @@ def save_image(url, path):
     file.write(image.content)
     file.close()
     
-def test_get_image(top_tracks: json):
+def get_album_covers(spotify, IMG_COUNT: int):
     unique_album_ids = set()
-    item = top_tracks['items'][6]
-    unique_album_ids.add(item['album']['id'])
-    image_path = item['album']['images'][2]['url']
-    save_image(image_path, f'./images/test_image{0}.jpg')
+    albums = list()
+    offset = 0
+    index = 0
+    while len(unique_album_ids) < IMG_COUNT:
+        top_tracks = spotify.current_user_top_tracks(limit=1, offset=offset)
+        offset += 1
+        album = top_tracks['items'][0]['album']
+        if album['id'] in unique_album_ids:
+            print(f"skipped album {album['name']} (duplicate)")
+            continue
+        unique_album_ids.add(album['id'])
+        image_path = album['images'][2]['url'] # take 64x64 album cover (other options are 300x300 and 640x640)
+        print(f"saved album {album['name']}")
+        save_image(image_path, f'./images/album_image_{index}.jpg')
+        albums.append(Album(album, f'./images/album_image_{index}.jpg'))
+        index += 1
+    return albums
     
-def get_dominant_colour():
-    image = cv.imread('./images/test_image0.jpg')
-    image = image.reshape((-1, 3))
-    image = np.float32(image)
-    
-    criteria = (cv.TermCriteria_EPS + cv.TermCriteria_MAX_ITER, 10, 1.0)
-    flags = cv.KMEANS_RANDOM_CENTERS
-    K = 8
-    _, labels, palette = cv.kmeans(image, K, None, criteria, 10, flags)
-    _, counts = np.unique(labels, return_counts=True)
-    
-    r, g, b = palette[np.argmax(counts)]
-    print(f"the perceived brightness is {0.21*r + 0.72*g + 0.07*b}")
-    
+def create_image(albums: list, SIZE):
+    albums.sort(key=lambda album: album.luminance)
+    columns = list()
+    for index in range(0, len(albums), SIZE):
+        images = [cv.imread(albums[index+offset].path) for offset in range(SIZE)]
+        columns.append(np.hstack([*images]))
+    image = np.vstack([*columns])
+    cv.imwrite('./images/output.png', image)
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Album Mosaic Generator")
+    parser.add_argument('--size', help="Set the number of albums in x and y axis", default=5, required=False)
+    args = parser.parse_args()
+    MOSAIC_WIDTH = int(args.size)
+    
     USERNAME, CLIENT_ID, CLIENT_SECRET = get_credentials()
-    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id=CLIENT_ID,
+    
+    spotify = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id=CLIENT_ID,
                                                    client_secret=CLIENT_SECRET,
                                                    redirect_uri="https://github.com/danpfister",
                                                    scope="user-top-read"))
     
-    IMG_COUNT = 10
-    top_tracks = sp.current_user_top_tracks(limit=IMG_COUNT)
-    test_get_image(top_tracks)
-    get_dominant_colour()
+    albums = get_album_covers(spotify, MOSAIC_WIDTH**2)
+    create_image(albums, MOSAIC_WIDTH)
+    
