@@ -70,11 +70,11 @@ def get_album_covers(spotify, IMG_COUNT: int):
     
 def create_image(albums: list, SIZE):
     albums.sort(key=lambda album: album.luminance)
-    columns = list()
+    rows = list()
     for index in range(0, len(albums), SIZE):
         images = [cv.imread(albums[index+offset].path) for offset in range(SIZE)]
-        columns.append(np.hstack([*images]))
-    image = np.vstack([*columns])
+        rows.append(np.hstack([*images]))
+    image = np.vstack([*rows])
     cv.imwrite('./images/output.png', image)
 
 if __name__ == "__main__":
